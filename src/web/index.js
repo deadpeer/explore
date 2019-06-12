@@ -10,8 +10,6 @@ import { seed } from './seed.js'
 
 import './index.css'
 
-console.log(seed)
-
 const state = Struct({
   text: 'Test',
   color: 'red',
