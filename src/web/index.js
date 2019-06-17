@@ -141,7 +141,9 @@ const future = flow(Future)(function*() {
   return multiply(foo)(bar)
 })
 
-fork(console.error)(console.log)(future)
+// TODO: make `fork` function that returns an IO of future.fork
+// TODO: make `subscribe` function that returns an IO of most.subscribe which returns an IO of unsubscribe
+// TODO: make `observe` function that returns an IO of most.observe which returns a future-ified promise
 
 const state = Struct({
   text: 'Test',
