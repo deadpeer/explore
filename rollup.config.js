@@ -23,48 +23,45 @@ export default {
       sourcemap: true,
     },
   ],
-   plugins: [
-      babel({
-        exclude: 'node_modules/**'
-      }),
+  plugins: [
+    babel({
+      exclude: 'node_modules/**',
+    }),
 
-      resolve({
-        mainFields: ['module', 'main', 'browser'],
-      }),
+    resolve({
+      mainFields: ['module', 'main', 'browser'],
+    }),
 
+    commonjs(),
 
-     commonjs(),
+    postcss({
+      plugins: [
+        postcssPresetEnv({ stage: 0 }),
+        simplevars(),
+        nested(),
+        cssimport(),
+        cssnano(),
+        autoprefixer(),
+        tailwind(),
+      ],
+      extensions: ['.css'],
+    }),
 
-     postcss({
-       plugins: [
-	 postcssPresetEnv({ stage: 0 }),
-         simplevars(),
-         nested(),
-         cssimport(),
-         cssnano(),
-         autoprefixer(),
-         tailwind(),
-       ],
-       extensions: [ '.css' ],
-     }),
+    copy({
+      targets: [{ src: 'static/**/*', dest: 'public' }],
+    }),
 
-     copy({
-       targets: [
-         { src: 'static/**/*', dest: 'public' }
-       ],
-     }),
+    serve({
+      contentBase: 'public',
+      host: '0.0.0.0',
+      port: 3000,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+      },
+    }),
 
-     serve({
-       contentBase: 'public',
-       host: '0.0.0.0',
-       port: 3000,
-       headers: {
-         'Access-Control-Allow-Origin': '*',
-       }
-     }),
-
-     livereload({
-       watch: ['src', 'static'],
-     }),
-   ],
+    livereload({
+      watch: ['src', 'static'],
+    }),
+  ],
 }
