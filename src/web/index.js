@@ -8,10 +8,64 @@ import when from 'mutant/when'
 import monet from 'monet'
 import { pipe, compose } from 'ramda'
 import {
+  of as mostOf,
+  map as mostMap,
+  chain as mostChain,
+  ap as mostAp,
+  slice as mostSlice,
+  merge,
+  mergeArray,
+  combine,
+  combineArray,
+  sample,
+  sampleWith,
+  zip,
+  switchLatest,
+  join,
+  mergeConcurrently,
+  awaitPromises,
+  debounce,
+  throttle,
+  delay,
+  multicast,
+  timestamp,
+  tap,
+  filter,
+  skipRepeats,
+  skipRepeatsWith,
+  transduce,
+  take,
+  skip,
+  since,
+  during,
+  loop,
+  takeWhile,
+  skipAfter,
+  until,
+  continueWith,
+  concatMap,
+  constant,
+  scan,
+  from,
+  fromPromise,
+  fromEvent,
+  periodic,
+  empty,
+  never,
+  iterate,
+  unfold,
+  generate,
+  startWith,
+  concat,
+  recoverWith,
+  throwError,
+} from 'most'
+import {
   Future,
-  fork,
+  fork as futureFork,
   isFuture,
   resolve,
+  encaseP,
   ap as futureAp,
   map as futureMap,
   chain as futureChain,
@@ -25,7 +79,7 @@ const { Either, Left, Right, IO } = monet
 
 // functional
 const noop = () => {}
-const useless = IO(noop)
+const useless = () => IO(noop)
 
 // monad
 const ERROR_MISSING_OF_METHOD = 'Object does not have an `of` method.'
@@ -36,6 +90,8 @@ const of = M => v => {
     ? M.of
     : M.unit
     ? M.unit
+    : M.pure
+    ? M.pure
     : M === Future
     ? resolve
     : M === Promise
@@ -68,9 +124,12 @@ const ap = f => m => (isFuture(m) ? futureAp(f)(m) : m.ap(f))
 const map = f => m => (isFuture(m) ? futureMap(f)(m) : m.map(f))
 
 // io
-const evaluate = f => f()
-const execute = io => io.run()
-const run = f => execute(evaluate(f))
+IO.io = f => IO(f)
+IO.of = f => IO(f)
+IO.unit = f => IO(f)
+IO.pure = f => IO(f)
+
+const run = io => io.run()
 
 // either
 const isRight = e => e.isRight()
@@ -119,7 +178,7 @@ const flow = M => g => {
     return chain(recurse)(current.value)
   }
 
-  return recurse(null)
+  return recurse()
 }
 
 // math
@@ -133,17 +192,77 @@ const divide = x => y => {
   return x / y
 }
 
+// reactive
+const ERROR_UNHANDLED_EXCEPTION = 'Unhandled exception in stream.'
+
+const Stream = {
+  of: mostOf,
+  map: mostMap,
+  chain: mostChain,
+  ap: mostAp,
+  slice: mostSlice,
+}
+
+const fork = reject => resolve => future =>
+  of(IO)(() =>
+    futureFork(() => run(reject()))(() => run(resolve()))(future),
+  ).map(cancel => () => IO(() => cancel()))
+
+const subscribe = observer => stream =>
+  IO(() =>
+    stream.subscribe({
+      next: value => run((observer.next || useless)(value)),
+      complete: () => run((observer.complete || useless)()),
+      error: error => run(observer.error(error)),
+    }),
+  ).map(subscription => () => IO(() => subscription.unsubscribe()))
+
+// TODO: Future class
+// TODO: const reduce = () => {}
+// TODO: const drain = () => {}
+
+const observe = createIO => stream =>
+  of(IO)(() => stream.observe(v => run(createIO(v)))).map(promise =>
+    encaseP(() => promise)(),
+  )
+
 // execution
-const future = flow(Future)(function*() {
-  const foo = yield resolve(5)
-  const bar = yield resolve(10)
+const Log = v => IO(() => console.log(v))
+const Report = v => IO(() => console.error(v))
 
-  return multiply(foo)(bar)
-})
+const reportFailure = () => Report('failure')
+const logSuccess = () => Log('success')
 
-// TODO: make `fork` function that returns an IO of future.fork
-// TODO: make `subscribe` function that returns an IO of most.subscribe which returns an IO of unsubscribe
-// TODO: make `observe` function that returns an IO of most.observe which returns a future-ified promise
+const stream = of(Stream)(1000)
+
+// const io = observe(Log)(stream).chain(future =>
+//   fork(reportFailure)(logSuccess)(future),
+// )
+
+const io = subscribe({
+  next: Log,
+  complete: () => Log('complete'),
+  error: Report,
+})(stream).chain(unsubscribe => unsubscribe())
+
+run(io)
+
+// run(observable)
+
+// const io = observe(v => console.log(v))(stream).chain(future =>
+//   fork(() => console.error('error'))(() => console.log('done'))(future),
+// )
+
+// const future = Future((miss, pass) => {
+//   const timeout = setTimeout(pass, 3000, 69)
+//
+//   return () => {
+//     console.log('clearing')
+//     clearTimeout(timeout)
+//   }
+// })
+
+// const io = fork(console.error)(console.log)(future).chain(cancel => cancel())
 
 const state = Struct({
   text: 'Test',
