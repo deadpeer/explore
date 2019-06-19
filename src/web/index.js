@@ -181,17 +181,6 @@ const flow = M => g => {
   return recurse()
 }
 
-// math
-const ERROR_DIVIDE_BY_ZERO = 'Cannot divide by zero.'
-
-const multiply = x => y => x * y
-const add = x => y => x + y
-const divide = x => y => {
-  if (y === 0) throw new Error(ERROR_DIVIDE_BY_ZERO)
-
-  return x / y
-}
-
 // reactive
 const ERROR_UNHANDLED_EXCEPTION = 'Unhandled exception in stream.'
 
@@ -226,6 +215,17 @@ const observe = createIO => stream =>
     encaseP(() => promise)(),
   )
 
+// math
+const ERROR_DIVIDE_BY_ZERO = 'Cannot divide by zero.'
+
+const multiply = x => y => x * y
+const add = x => y => x + y
+const divide = x => y => {
+  if (y === 0) throw new Error(ERROR_DIVIDE_BY_ZERO)
+
+  return x / y
+}
+
 // execution
 const Log = v => IO(() => console.log(v))
 const Report = v => IO(() => console.error(v))
@@ -243,7 +243,7 @@ const io = subscribe({
   next: Log,
   complete: () => Log('complete'),
   error: Report,
-})(stream).chain(unsubscribe => unsubscribe())
+})(stream)
 
 run(io)
 
