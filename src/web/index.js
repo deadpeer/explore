@@ -13,6 +13,7 @@ import {
   chain as mostChain,
   ap as mostAp,
   slice as mostSlice,
+  reduce as mostReduce,
   merge,
   mergeArray,
   combine,
@@ -78,123 +79,137 @@ import './index.css'
 const { Either, Left, Right, IO } = monet
 
 // functional
-const noop = () => {}
-const useless = () => IO(noop)
+const noop =
+  () => {}
 
-// monad
-const ERROR_MISSING_OF_METHOD = 'Object does not have an `of` method.'
-const ERROR_MISSING_CHAIN_METHOD = 'Object does not have a `chain` method.'
+const useless =
+  () => IO(noop)
 
-const of = M => v => {
-  const operation = M.of
-    ? M.of
+const of = M => v =>
+  M.of
+    ? M.of (v)
     : M.unit
-    ? M.unit
+    ? M.unit (v)
     : M.pure
-    ? M.pure
+    ? M.pure (v)
     : M === Future
-    ? resolve
+    ? resolve (v)
     : M === Promise
-    ? Promise.resolve
+    ? Promise.resolve (v)
     : null
 
-  if (!operation) throw new Error(ERROR_MISSING_OF_METHOD)
-
-  return operation(v)
-}
-
-const chain = f => m => {
-  const operation = m.chain
-    ? m.chain
+const chain = f => m =>
+  m.chain
+    ? m.chain (f)
     : m.flatMap
-    ? m.flatMap
+    ? m.flatMap (f)
     : m.bind
-    ? m.bind
+    ? m.bind (f)
     : m.then
-    ? m.then
-    : isFuture(m)
-    ? f => futureChain(f)(m)
+    ? m.then (f)
+    : isFuture (m)
+    ? futureChain (f)(m)
     : null
 
-  if (!operation) throw new Error(ERROR_MISSING_CHAIN_METHOD)
+const reduce =
+  r => i => m =>
+    isStream (m)
+      ? () => reduceStream (r) (i) (m)
+      : m.reduce
+      ? () => m.reduce (r, i)
+      : null
 
-  return operation(f)
-}
-const ap = f => m => (isFuture(m) ? futureAp(f)(m) : m.ap(f))
-const map = f => m => (isFuture(m) ? futureMap(f)(m) : m.map(f))
+const ap =
+  f => m => (isFuture(m) ? futureAp(f)(m) : m.ap(f))
+
+const map =
+  f => m => (isFuture(m) ? futureMap(f)(m) : m.map(f))
 
 // io
-IO.io = f => IO(f)
-IO.of = f => IO(f)
-IO.unit = f => IO(f)
-IO.pure = f => IO(f)
+IO.io =
+  f => IO (f)
 
-const run = io => io.run()
+IO.of =
+  f => IO (f)
+
+IO.unit =
+  f => IO(f)
+
+IO.pure =
+  f => IO(f)
+
+const run =
+  io => io.run ()
 
 // either
-const isRight = e => e.isRight()
-const isLeft = e => e.isLeft()
-const right = e => e.right()
-const left = e => e.left()
+const isRight =
+  e => e.isRight ()
 
-const value = e => {
-  let x
+const isLeft =
+  e => e.isLeft ()
 
-  try {
-    x = right(e)
-  } catch (error) {
-    x = left(e)
-  }
+const right =
+  e => e.right ()
 
-  return x
-}
+const left =
+  e => e.left ()
 
-const containsLeft = v => e => v === left(e)
-const containsRight = v => e => v === right(e)
+const value =
+  e => {
+    let x
 
-const contains = v => e => {
-  let x
-
-  try {
-    x = right(e)
-  } catch (error) {
-    x = left(e)
-  }
-
-  return x === v
-}
-
-// flow (do notation)
-const flow = M => g => {
-  const doing = g()
-
-  const recurse = v => {
-    const current = doing.next(v)
-
-    if (current.done) {
-      return of(M)(current.value)
+    try {
+      x = right(e)
+    } catch (error) {
+      x = left(e)
     }
 
-    return chain(recurse)(current.value)
+    return x
   }
 
-  return recurse()
-}
+const containsLeft =
+  v => e => v === left(e)
+
+const containsRight =
+  v => e => v === right(e)
+
+const contains =
+  v => e => {
+    let x
+
+    try {
+      x = right(e)
+    } catch (error) {
+      x = left(e)
+    }
+
+    return x === v
+  }
+
+// flow (do notation)
+const flow =
+  M => g => {
+    const doing = g()
+
+    const recurse = v => {
+      const current = doing.next(v)
+
+      if (current.done) {
+        return of(M)(current.value)
+      }
+
+      return chain(recurse)(current.value)
+    }
+
+    return recurse()
+  }
 
 // reactive
 const ERROR_UNHANDLED_EXCEPTION = 'Unhandled exception in stream.'
 
-const Stream = {
-  of: mostOf,
-  map: mostMap,
-  chain: mostChain,
-  ap: mostAp,
-  slice: mostSlice,
-}
-
 const fork = reject => resolve => future =>
   of(IO)(() =>
-    futureFork(() => run(reject()))(() => run(resolve()))(future),
+    futureFork(e => run(reject(e)))(v => run(resolve(v)))(future),
   ).map(cancel => () => IO(() => cancel()))
 
 const subscribe = observer => stream =>
@@ -206,14 +221,26 @@ const subscribe = observer => stream =>
     }),
   ).map(subscription => () => IO(() => subscription.unsubscribe()))
 
-// TODO: Future class
-// TODO: const reduce = () => {}
 // TODO: const drain = () => {}
 
 const observe = createIO => stream =>
-  of(IO)(() => stream.observe(v => run(createIO(v)))).map(promise =>
+  of(IO)(() => stream . observe(v => run(createIO(v)))).map(promise =>
     encaseP(() => promise)(),
   )
+
+const isStream =
+  stream => !!stream.source
+
+const reduceStream = reducer => initial => stream =>
+  encaseP (() => mostReduce (reducer, initial, stream)) ()
+
+const Stream = {
+  of: mostOf,
+  map: mostMap,
+  chain: mostChain,
+  ap: mostAp,
+  slice: mostSlice,
+}
 
 // math
 const ERROR_DIVIDE_BY_ZERO = 'Cannot divide by zero.'
@@ -221,31 +248,80 @@ const ERROR_DIVIDE_BY_ZERO = 'Cannot divide by zero.'
 const multiply = x => y => x * y
 const add = x => y => x + y
 const divide = x => y => {
-  if (y === 0) throw new Error(ERROR_DIVIDE_BY_ZERO)
+  if (x === 0) throw new Error(ERROR_DIVIDE_BY_ZERO)
 
-  return x / y
+  return y / x
 }
 
 // execution
-const Log = v => IO(() => console.log(v))
-const Report = v => IO(() => console.error(v))
+const Return =
+  value => IO (() => value)
 
-const reportFailure = () => Report('failure')
-const logSuccess = () => Log('success')
+const Log =
+  value => IO (() => console.log (value))
 
-const stream = of(Stream)(1000)
+const Report =
+  error => IO (() => console.error (error))
+
+const all =
+  (current, previous) => previous + current
+
+const process = pipe (
+  multiply (10),
+  add (50),
+  divide (5),
+)
+
+const main =
+  flow (IO) (function * () {
+    const string = yield Return ('hello')
+
+    yield Log (string)
+
+    // const future = yield fork (Report) (Return) (
+    //   reduce (all) (0) (
+    //     from ([1, 2, 3, 4, 5]) . map (process)
+    //   )
+    // )
+  })
+
+run (main)
+
+// const main = pipe (
+//   map (add (10)),
+//   chain (Log),
+// ) (Return (20))
+
+// const io = Return (20) . map (add (15)) . chain (Log)
+
+// run (
+//   pipe (
+//     map (add (15)),
+//     chain (Log),
+//   ) (Return (50))
+// )
+
+
+// const array = [1, 2, 3, 4, 5]
+
+// from (array) . reduce ((p, c) => p + c, 0) . then (v => console.log (v))
+
+// mostReduce(v => v + 1) (0) (from ([1, 2, 3, 4, 5]))
+
+
+// const stream = of(Stream)(1000)
 
 // const io = observe(Log)(stream).chain(future =>
 //   fork(reportFailure)(logSuccess)(future),
 // )
 
-const io = subscribe({
-  next: Log,
-  complete: () => Log('complete'),
-  error: Report,
-})(stream)
-
-run(io)
+// const io = subscribe({
+//   next: Log,
+//   complete: () => Log('complete'),
+//   error: Report,
+// })(stream)
+//
+// run(io)
 
 // run(observable)
 
