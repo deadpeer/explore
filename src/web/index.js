@@ -1,19 +1,22 @@
 // next
 // TODO: stream.fromFuture
 // TODO: stream.awaitFutures
+// TODO: stream.tap
 // TODO: future.fold
 // TODO: future.value
+// TODO: crocks list
 // TODO: record (object)
 
 // future
-// TODO: add typescript
-// TODO: fork crocks (typescript + monet IO)
+// TODO: fork crocks (use monet IO)
 // TODO: fork most (use IO)
 // TODO: fork fluture (use IO)
 // TODO: copy useful lodash / ramda functions
 // TODO: integrate crocks + most + fluture into library
 // TODO: ensure proper code splitting
+// TODO: fork mutant to implement code splitting + monadic io + ssr (sapper-like)
 // TODO: fork prettier to implement functional code style
+// TODO: add typescript definitions
 
 import 'setimmediate'
 
@@ -82,12 +85,12 @@ import {
 import {
   Future,
   fork as futureFork,
-  isFuture,
-  resolve,
-  encaseP,
   ap as futureAp,
   map as futureMap,
   chain as futureChain,
+  isFuture,
+  resolve,
+  encaseP,
 } from 'fluture'
 
 import { seed } from './seed.js'
@@ -99,6 +102,31 @@ const { Either } = crocks
 
 const Left = Either.Left
 const Right = Either.Right
+
+// number
+const ERROR_DIVIDE_BY_ZERO = 'Cannot divide by zero.'
+
+const multiply =
+  x => y => x * y
+
+const add =
+  x => y => x + y
+
+const divide =
+  x => y => {
+    if (x === 0) throw new Error (ERROR_DIVIDE_BY_ZERO)
+
+    return y / x
+  }
+
+// string
+const toUpperCase =
+  string => string.toUpperCase ()
+
+const toLowerCase =
+  string => string.toLowerCase ()
+
+
 
 // functional
 const noop =
@@ -157,7 +185,7 @@ const map =
 
 // io
 const run =
-  io => io.run ()
+  io => io . run ()
 
 const runWith =
   f => v => run (f (v))
@@ -238,16 +266,24 @@ const flow =
   }
 
 // reactive
-const fork = reject => resolve => future =>
-  map (
-    cancel => IO (() => cancel ())
-  ) (
-    IO (() => futureFork (
-      isIO (reject) ? () => run (reject) : runWith (reject)
+const timeout =
+  v => ms => Future ((_, resolve) => {
+    const timeout = setTimeout (() => resolve (v), ms)
+
+    return () => clearTimeout (timeout)
+  })
+
+  const fork =
+  reject => resolve => future =>
+    map (
+      cancel => IO (() => cancel ())
     ) (
-      isIO (resolve) ? () => run (resolve) : runWith (resolve)
-    ) (future))
-  )
+      IO (() => futureFork (
+        isIO (reject) ? () => run (reject) : runWith (reject)
+      ) (
+        isIO (resolve) ? () => run (resolve) : runWith (resolve)
+      ) (future))
+    )
 
 const subscribe = observer => stream =>
   map (
@@ -293,6 +329,31 @@ const Stream = {
   slice: mostSlice,
 }
 
+const Variable =
+  v => {
+    let value = v
+    let effects = []
+
+    return {
+      get: () => IO (() => value),
+      set: v => IO (() => {
+        value = v
+
+        effects . forEach (effect => run (effect (value)))
+      }),
+      react: effect => IO (() => (effects = [...effects, effect])),
+    }
+  }
+
+const get =
+  b => b . get ()
+
+const set =
+  v => b => b . set (v)
+
+const react =
+  f => b => b . react (f)
+
 class EmitterInstance {
   emitEvent (type) {
     return value => IO (() => this . _emit (type, value))
@@ -318,28 +379,9 @@ const Emitter =
 const emit =
   emitter => type => value => emitter . emit (type) (value)
 
-// math
-const ERROR_DIVIDE_BY_ZERO = 'Cannot divide by zero.'
-
-const multiply =
-  x => y => x * y
-
-const add =
-  x => y => x + y
-
-const divide =
-  x => y => {
-    if (x === 0) throw new Error (ERROR_DIVIDE_BY_ZERO)
-
-    return y / x
-  }
-
 // execution
 const all =
   (current, previous) => previous + current
-
-const toUpperCase =
-  string => string.toUpperCase ()
 
 const process = pipe (
   multiply (10),
@@ -352,9 +394,7 @@ const io = Return (20) . map (add (15)) . map (divide (5))
 const other = pipe (map (add (10))) (Return (20))
 
 const main = flow (IO) (function * () {
-  const string = yield Return ('hello')
-
-  yield Log (string)
+  yield chain (Log) (Return ('hello'))
 
   const x = yield io
   const y = yield other
@@ -369,9 +409,8 @@ const main = flow (IO) (function * () {
     complete: Log ('done'),
   }) (stream)
 
-  const cancel = yield fork (Report) (Log) (future)
+  yield fork (Report) (Log) (future)
 
-  // yield cancel
   // yield unsubscribe
 
   const f = yield observe (Log) (stream . map (multiply (2)))
@@ -380,16 +419,42 @@ const main = flow (IO) (function * () {
 
   const emitter = Emitter ()
 
-  const foo = fromEvent ('foo') (emitter) . map (toUpperCase) . take (2)
+  const foo = fromEvent ('foo') (emitter) . map (toUpperCase) . take (3)
 
   yield observe (Log) (foo)
 
   const emitFoo = emit (emitter) ('foo')
 
-  yield emitFoo ('foo')
-  yield emitFoo ('bar')
-  yield emitFoo ('hello')
-  yield emitFoo ('world')
+  const z = pipe (
+    map (v => `-*-* ${v} *-*-`),
+    chain (v => Future ((reject, resolve) => resolve (`---- ${v} ----`))),
+  ) (timeout ('foo') (1000))
+
+  yield fork (Report) (emitFoo) (z)
+
+  yield fork (Report) (emitFoo) (timeout ('bar') (2000))
+
+  const cancel = yield fork (Report) (emitFoo) (timeout ('baz') (3000))
+
+  yield fork (Report) (emitFoo) (timeout ('hello') (4000))
+
+  yield fork (Report) (emitFoo) (timeout ('world') (5000))
+
+  yield cancel
+
+  const variable = Variable (500)
+
+  yield react (Log) (variable)
+
+  yield set (777) (variable)
+
+  const one = yield get (variable)
+
+  yield set (666) (variable)
+
+  const two = yield get (variable)
+
+  yield Log (add (one) (two))
 })
 
 run (main)
