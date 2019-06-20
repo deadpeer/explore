@@ -1,4 +1,7 @@
 // next
+// TODO: atom.flatten
+// TODO: atom.accumulate
+// TODO: stream.fromAtom
 // TODO: stream.fromFuture
 // TODO: stream.awaitFutures
 // TODO: stream.tap
