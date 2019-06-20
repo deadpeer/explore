@@ -329,7 +329,7 @@ const Stream = {
   slice: mostSlice,
 }
 
-const Variable =
+const Atom =
   v => {
     let value = v
     let effects = []
@@ -338,7 +338,6 @@ const Variable =
       get: () => IO (() => value),
       set: v => IO (() => {
         value = v
-
         effects . forEach (effect => run (effect (value)))
       }),
       react: effect => IO (() => (effects = [...effects, effect])),
@@ -346,13 +345,13 @@ const Variable =
   }
 
 const get =
-  b => b . get ()
+  a => a . get ()
 
 const set =
-  v => b => b . set (v)
+  v => a => a . set (v)
 
 const react =
-  f => b => b . react (f)
+  f => a => a . react (f)
 
 class EmitterInstance {
   emitEvent (type) {
@@ -442,17 +441,17 @@ const main = flow (IO) (function * () {
 
   yield cancel
 
-  const variable = Variable (500)
+  const atom = Atom (500)
 
-  yield react (Log) (variable)
+  yield react (Log) (atom)
 
-  yield set (777) (variable)
+  yield set (777) (atom)
 
-  const one = yield get (variable)
+  const one = yield get (atom)
 
-  yield set (666) (variable)
+  yield set (666) (atom)
 
-  const two = yield get (variable)
+  const two = yield get (atom)
 
   yield Log (add (one) (two))
 })
