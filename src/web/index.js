@@ -351,10 +351,10 @@ const get =
   a => a . get ()
 
 const set =
-  v => a => a . set (v)
+  a => v => a . set (v)
 
 const react =
-  f => a => a . react (f)
+  a => f => a . react (f)
 
 class EmitterInstance {
   emitEvent (type) {
@@ -444,19 +444,41 @@ const main = flow (IO) (function * () {
 
   yield cancel
 
-  const atom = Atom (500)
+  yield Log ('----------------------')
 
-  yield react (Log) (atom)
+  const a = Atom (0)
+  const b = Atom (0)
 
-  yield set (777) (atom)
+  yield react (a) (
+    c => get (b) . chain (p => set (b) (p + c))
+  )
 
-  const one = yield get (atom)
+  yield react (b) (Log)
 
-  yield set (666) (atom)
+  yield set (a) (100)
+  yield set (a) (50)
+  yield set (a) (50)
+  yield set (a) (50)
 
-  const two = yield get (atom)
+  // const g = get (atom)
 
-  yield Log (add (one) (two))
+  // yield react (Log) (atom)
+
+  // yield set (777) (atom)
+
+  // const one = yield get (atom)
+
+  // yield set (666) (atom)
+
+  // const i = yield g
+
+  // yield Log (i)
+
+  // const two = yield get (atom)
+
+  // yield Log (add (one) (two))
+
+  yield Log ('----------------------')
 })
 
 run (main)
