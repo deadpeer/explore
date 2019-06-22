@@ -1,6 +1,4 @@
 // next
-// TODO: atom.flatten
-// TODO: atom.accumulate
 // TODO: stream.fromAtom
 // TODO: stream.fromFuture
 // TODO: stream.awaitFutures
@@ -9,6 +7,7 @@
 // TODO: future.value
 // TODO: crocks list
 // TODO: record (object)
+// TODO: curry all multiple parameters
 
 // future
 // TODO: fork crocks (use monet IO)
@@ -129,8 +128,6 @@ const toUpperCase =
 const toLowerCase =
   string => string.toLowerCase ()
 
-
-
 // functional
 const noop =
   () => {}
@@ -139,7 +136,7 @@ const useless =
   () => IO (noop)
 
 const id =
-  v => () => v
+  v => v
 
 const of =
   M => v =>
@@ -205,6 +202,13 @@ const Log =
 const Report =
   error => IO (() => console . error (error))
 
+const interval =
+  io => ms => IO (() => {
+    const interval = setInterval (() => run (io), ms)
+
+    return IO (() => clearInterval (interval))
+  })
+
 // either
 const isRight = e =>
   e . isRight ()
@@ -268,15 +272,15 @@ const flow =
     return recurse ()
   }
 
-// reactive
+// future
 const timeout =
-  v => ms => Future ((_, resolve) => {
+  (v = null) => ms => Future ((_, resolve) => {
     const timeout = setTimeout (() => resolve (v), ms)
 
     return () => clearTimeout (timeout)
   })
 
-  const fork =
+const fork =
   reject => resolve => future =>
     map (
       cancel => IO (() => cancel ())
@@ -288,6 +292,7 @@ const timeout =
       ) (future))
     )
 
+// stream
 const subscribe = observer => stream =>
   map (
     subscription => IO (() => subscription.unsubscribe ())
@@ -332,18 +337,24 @@ const Stream = {
   slice: mostSlice,
 }
 
+// atom
 const Atom =
-  v => {
+  (v, reducer = (_, c) => c) => {
     let value = v
     let effects = []
 
     return {
       get: () => IO (() => value),
-      set: v => IO (() => {
-        value = v
+
+      set: (n, override) => IO (() => {
+        value = override ? override (value, n) : reducer (value, n)
+
         effects . forEach (effect => run (effect (value)))
       }),
-      react: effect => IO (() => (effects = [...effects, effect])),
+
+      react: effect => IO (() => (
+        effects = effects . concat (effect))
+      ),
     }
   }
 
@@ -351,11 +362,41 @@ const get =
   a => a . get ()
 
 const set =
-  a => v => a . set (v)
+  a => (v, o) => a . set (v, o)
 
 const react =
   a => f => a . react (f)
 
+const flatten =
+  (...list) => flow (IO) (function * () {
+    const initial = []
+
+    for (let i = 0 ; i < list.length ; i++) {
+      const value = yield get (list[i])
+      initial . push (value)
+    }
+
+    const atom = Atom (initial)
+
+    for (let i = 0 ; i < list.length ; i++) {
+      yield react (list[i]) (value => flow (IO) (function * () {
+        const current = [...yield get (atom)]
+
+        current[i] = value
+
+        yield set (atom) (current)
+      }))
+    }
+
+    return atom
+  })
+
+Atom.get = get
+Atom.set = set
+Atom.react = react
+Atom.flatten = flatten
+
+// emitter
 class EmitterInstance {
   emitEvent (type) {
     return value => IO (() => this . _emit (type, value))
@@ -381,9 +422,11 @@ const Emitter =
 const emit =
   emitter => type => value => emitter . emit (type) (value)
 
+
+
 // execution
 const all =
-  (current, previous) => previous + current
+  (previous, current) => previous + current
 
 const process = pipe (
   multiply (10),
@@ -413,8 +456,6 @@ const main = flow (IO) (function * () {
 
   yield fork (Report) (Log) (future)
 
-  // yield unsubscribe
-
   const f = yield observe (Log) (stream . map (multiply (2)))
 
   yield fork (Report ('miss')) (Log ('pass')) (f)
@@ -429,7 +470,9 @@ const main = flow (IO) (function * () {
 
   const z = pipe (
     map (v => `-*-* ${v} *-*-`),
-    chain (v => Future ((reject, resolve) => resolve (`---- ${v} ----`))),
+    chain (
+      v => Future ((reject, resolve) => resolve (`---- ${v} ----`))
+    ),
   ) (timeout ('foo') (1000))
 
   yield fork (Report) (emitFoo) (z)
@@ -444,88 +487,30 @@ const main = flow (IO) (function * () {
 
   yield cancel
 
-  yield Log ('----------------------')
+  const a = Atom (0, all)
+  const b = Atom ('hello')
+  const c = Atom (['a', 'b', 'c'])
 
-  const a = Atom (0)
-  const b = Atom (0)
+  const flattened = yield flatten (a, b, c)
 
-  yield react (a) (
-    c => get (b) . chain (p => set (b) (p + c))
-  )
+  yield react (flattened) (Log)
 
-  yield react (b) (Log)
+  yield fork (Report) (set (a)) (timeout (200) (2000))
 
-  yield set (a) (100)
+  yield set (a) (1000)
   yield set (a) (50)
   yield set (a) (50)
-  yield set (a) (50)
+  yield set (c) ('d', (p, v) => p . concat (v))
+  yield set (b) ('world')
 
-  // const g = get (atom)
+  const clear = yield interval (set (a) (5)) (1000)
 
-  // yield react (Log) (atom)
+  yield fork (Report) (clear) (timeout () (10000))
 
-  // yield set (777) (atom)
-
-  // const one = yield get (atom)
-
-  // yield set (666) (atom)
-
-  // const i = yield g
-
-  // yield Log (i)
-
-  // const two = yield get (atom)
-
-  // yield Log (add (one) (two))
-
-  yield Log ('----------------------')
+  yield fork (Report) (id) (timeout (Log ('hello world')) (5000))
 })
 
 run (main)
-
-// run (
-//   pipe (
-//     map (add (15)),
-//     chain (Log),
-//   ) (Return (50))
-// )
-
-// const array = [1, 2, 3, 4, 5]
-
-// from (array) . reduce ((p, c) => p + c, 0) . then (v => console.log (v))
-
-// mostReduce(v => v + 1) (0) (from ([1, 2, 3, 4, 5]))
-
-// const stream = of(Stream)(1000)
-
-// const io = observe(Log)(stream).chain(future =>
-//   fork(reportFailure)(logSuccess)(future),
-// )
-
-// const io = subscribe({
-//   next: Log,
-//   complete: () => Log('complete'),
-//   error: Report,
-// })(stream)
-//
-// run(io)
-
-// run(observable)
-
-// const io = observe(v => console.log(v))(stream).chain(future =>
-//   fork(() => console.error('error'))(() => console.log('done'))(future),
-// )
-
-// const future = Future((miss, pass) => {
-//   const timeout = setTimeout(pass, 3000, 69)
-//
-//   return () => {
-//     console.log('clearing')
-//     clearTimeout(timeout)
-//   }
-// })
-
-// const io = fork(console.error)(console.log)(future).chain(cancel => cancel())
 
 const state = Struct ({
   text: 'Test',
