@@ -370,9 +370,9 @@ const fromFuture =
   future => fromPromise (promise (future))
 
 const awaitFutures =
-  stream => IO (() => awaitPromises (
+  stream => awaitPromises (
     stream . map (future => promise (future))
-  ))
+  )
 
 const Stream = {
   of: mostOf,
@@ -547,20 +547,18 @@ const main = go (IO) (function * () {
   const futures = [
     http ('get') (getUsersUrl (5)),
     http ('get') (getUsersUrl (13)),
-    chain (
-      amount => http ('get') (getUsersUrl (amount))
-    ) (
-      map (
-        v => v * 2
-      ) (timer (2000) (7)),
-    )
+    pipe (
+      map (v => v * 2),
+      chain (amount => http ('get') (getUsersUrl (amount))),
+    ) (timer (2000) (7))
   ]
 
-  const s = from (futures)
-  const ss = yield awaitFutures (s)
-  const sss = ss . map (payload => dig ('data.results') (payload))
+  const stream = pipe (
+    awaitFutures,
+    map (payload => dig ('data.results') (payload))
+  ) (from (futures))
 
-  yield observe (log) (sss)
+  yield observe (log) (stream)
 })
 
 run (main)
