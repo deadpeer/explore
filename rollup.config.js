@@ -26,6 +26,7 @@ export default {
   plugins: [
     babel({
       exclude: 'node_modules/**',
+      plugins: ['@babel/plugin-proposal-export-default-from']
     }),
 
     resolve({

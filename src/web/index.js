@@ -1,35 +1,32 @@
-// next
-// TODO: stream.fromAtom
-// TODO: stream.fromFuture
-// TODO: stream.awaitFutures
+// today
 // TODO: stream.tap
 // TODO: future.fold
 // TODO: future.value
-// TODO: crocks list
-// TODO: record (object)
-// TODO: curry all multiple parameters
+
+// next
+// TODO: curry all multiple parameter functions
+// TODO: type validators (isFunctor, isMonad, isMap, isChain, isOf)
 
 // future
 // TODO: fork crocks (use monet IO)
-// TODO: fork most (use IO)
-// TODO: fork fluture (use IO)
+// TODO: fork most (use IO methods)
+// TODO: fork fluture (use IO methods)
+// TODO: ensure all functions return List rather than array
 // TODO: copy useful lodash / ramda functions
-// TODO: integrate crocks + most + fluture into library
-// TODO: ensure proper code splitting
-// TODO: fork mutant to implement code splitting + monadic io + ssr (sapper-like)
-// TODO: fork prettier to implement functional code style
 // TODO: add typescript definitions
+// TODO: fork prettier to implement functional code style
 
 import 'setimmediate'
 
-import h from 'mutant/html-element'
-import Struct from 'mutant/struct'
-import send from 'mutant/send'
-import computed from 'mutant/computed'
-import when from 'mutant/when'
+import axios from 'axios'
 import monet from 'monet'
 import crocks from 'crocks'
-import { pipe, compose } from 'ramda'
+import loGet from 'lodash.get'
+import {
+  pipe,
+  compose,
+  mergeDeepRight,
+} from 'ramda'
 import ee from 'event-emitter'
 import {
   of as mostOf,
@@ -93,6 +90,7 @@ import {
   isFuture,
   resolve,
   encaseP,
+  promise,
 } from 'fluture'
 
 import { seed } from './seed.js'
@@ -100,10 +98,7 @@ import { seed } from './seed.js'
 import './index.css'
 
 const { IO } = monet
-const { Either } = crocks
-
-const Left = Either.Left
-const Right = Either.Right
+const { Maybe, Either, List } = crocks
 
 // number
 const ERROR_DIVIDE_BY_ZERO = 'Cannot divide by zero.'
@@ -123,10 +118,13 @@ const divide =
 
 // string
 const toUpperCase =
-  string => string.toUpperCase ()
+  string => string . toUpperCase ()
 
 const toLowerCase =
-  string => string.toLowerCase ()
+  string => string . toLowerCase ()
+
+const capitalize =
+  string => string . charAt (0) . toUpperCase () + string . slice (1)
 
 // functional
 const noop =
@@ -150,6 +148,8 @@ const of =
       ? resolve (v)
       : M === Promise
       ? Promise . resolve (v)
+      : M === Object
+      ? assign ({}) (v)
       : null
 
 const chain =
@@ -163,7 +163,9 @@ const chain =
       : m.then
       ? m . then (f)
       : isFuture (m)
-      ? futureChain (f) (m)
+      ? m . pipe (futureChain (f))
+      : isObject (m)
+      ? f (m)
       : null
 
 const reduce =
@@ -181,7 +183,23 @@ const ap =
       : m.ap (f)
 
 const map =
-  f => m => (isFuture (m) ? futureMap (f) (m) : m . map (f))
+  f => m =>
+    isFuture (m)
+    ? m . pipe (futureMap (f))
+    : m . map
+    ? m . map (f)
+    : isObject (m)
+    ? assign ({}) (f(m))
+    : null
+
+// object
+const assign = mergeDeepRight
+
+const isObject =
+  m => typeof m === 'object'
+
+const dig =
+  p => (o, d = null) => loGet (o, p, d)
 
 // io
 const run =
@@ -193,14 +211,14 @@ const runWith =
 const isIO =
   m => !!m.effectFn
 
-const Return =
-  value => IO (() => value)
-
-const Log =
+const log =
   value => IO (() => console . log (value))
 
-const Report =
+const report =
   error => IO (() => console . error (error))
+
+const now =
+  () => IO (() => new Date ())
 
 const interval =
   io => ms => IO (() => {
@@ -210,6 +228,9 @@ const interval =
   })
 
 // either
+const Left = Either.Left
+const Right = Either.Right
+
 const isRight = e =>
   e . isRight ()
 
@@ -254,8 +275,8 @@ const contains =
     return x === v
   }
 
-// flow (do notation)
-const flow =
+// go (do notation)
+const go =
   M => g => {
     const doing = g ()
 
@@ -272,9 +293,13 @@ const flow =
     return recurse ()
   }
 
+// http
+const http =
+  method => (url, data, config) => encaseP (axios) ({ method, url, data, config })
+
 // future
-const timeout =
-  (v = null) => ms => Future ((_, resolve) => {
+const timer =
+  ms => (v = null) => Future ((_, resolve) => {
     const timeout = setTimeout (() => resolve (v), ms)
 
     return () => clearTimeout (timeout)
@@ -293,6 +318,10 @@ const fork =
     )
 
 // stream
+const UPDATE_STREAM = 'UPDATE_STREAM'
+
+const isStream = stream => !!stream.source
+
 const subscribe = observer => stream =>
   map (
     subscription => IO (() => subscription.unsubscribe ())
@@ -313,14 +342,10 @@ const observe =
   f => stream => map (
     promise => encaseP (() => promise) ()
   ) (
-    IO (
-      () => stream . observe (
+    IO (() => stream . observe (
         v => run (f (v))
-      )
-    )
+    ))
   )
-
-const isStream = stream => !!stream.source
 
 const reduceStream =
   reducer => initial => stream =>
@@ -329,32 +354,73 @@ const reduceStream =
 const fromEvent =
   type => emitter => mostFromEvent (type, emitter)
 
+const fromAtom =
+  atom => go (IO) (function * () {
+    const emitter = Emitter ()
+    const stream = fromEvent (UPDATE_STREAM) (emitter)
+
+    yield react (atom) (
+      v => emit (emitter) (UPDATE_STREAM) (v)
+    )
+
+    return stream
+  })
+
+const fromFuture =
+  future => fromPromise (promise (future))
+
+const awaitFutures =
+  stream => IO (() => awaitPromises (
+    stream . map (future => promise (future))
+  ))
+
 const Stream = {
   of: mostOf,
   map: mostMap,
   chain: mostChain,
   ap: mostAp,
   slice: mostSlice,
+  isStream,
+  subscribe,
+  drain,
+  observe,
+  from,
+  fromEvent,
+  fromAtom,
+  fromFuture,
+  awaitFutures,
 }
 
 // atom
 const Atom =
-  (v, reducer = (_, c) => c) => {
-    let value = v
-    let effects = []
+  (v, reducer = (_, c) => c, s) => {
+    const state = s || {
+      value: v,
+      effects: [],
+    }
 
     return {
-      get: () => IO (() => value),
+      get: () => IO (() => state.value),
 
       set: (n, override) => IO (() => {
-        value = override ? override (value, n) : reducer (value, n)
+        state.value = override ? override (state.value, n) : reducer (state.value, n)
 
-        effects . forEach (effect => run (effect (value)))
+        state.effects . forEach (effect => run (effect (state.value)))
       }),
 
       react: effect => IO (() => (
-        effects = effects . concat (effect))
+        state.effects = state.effects . concat (effect))
       ),
+
+      map: f => Atom (_, reducer, state),
+
+      chain: f => {
+        const atom = f (state.value)
+
+        state.effects . forEach (effect => atom . react (effect))
+
+        return atom
+      }
     }
   }
 
@@ -368,7 +434,7 @@ const react =
   a => f => a . react (f)
 
 const flatten =
-  (...list) => flow (IO) (function * () {
+  (...list) => go (IO) (function * () {
     const initial = []
 
     for (let i = 0 ; i < list.length ; i++) {
@@ -379,7 +445,7 @@ const flatten =
     const atom = Atom (initial)
 
     for (let i = 0 ; i < list.length ; i++) {
-      yield react (list[i]) (value => flow (IO) (function * () {
+      yield react (list[i]) (value => go (IO) (function * () {
         const current = [...yield get (atom)]
 
         current[i] = value
@@ -391,9 +457,33 @@ const flatten =
     return atom
   })
 
+const fuse =
+  f => a => b => go (IO) (function * () {
+    const av = yield get (a)
+    const bv = yield get (b)
+
+    const atom = Atom (f (av) (bv))
+
+    const reaction =
+      m => v => go (IO) (function * () {
+        const av = yield get (a)
+        const bv = yield get (b)
+
+        yield set (atom) (f (av) (bv))
+      })
+
+    yield react (a) (reaction (a))
+    yield react (b) (reaction (b))
+
+    return atom
+  })
+
+Atom.of = Atom
 Atom.get = get
 Atom.set = set
 Atom.react = react
+Atom.map = map
+Atom.chain = chain
 Atom.flatten = flatten
 
 // emitter
@@ -425,156 +515,52 @@ const emit =
 
 
 // execution
-const all =
-  (previous, current) => previous + current
+const logNames =
+  payload => chain (log) (
+    IO (() =>
+      pipe (
+        map (o => o.name.first),
+        map (capitalize),
+      ) (dig ('data.results') (payload))
+    )
+  )
 
-const process = pipe (
-  multiply (10),
-  add (50),
-  divide (5),
-)
+const getUsersUrl =
+  amount => `https://randomuser.me/api?results=${amount}`
 
-const io = Return (20) . map (add (15)) . map (divide (5))
+const getNames = go (Future) (function * () {
+  const results = [
+    yield http ('get') (getUsersUrl (2)),
+    yield http ('get') (getUsersUrl (5)),
+    yield http ('get') (getUsersUrl (13)),
+  ]
 
-const other = pipe (map (add (10))) (Return (20))
+  return chain (
+    r => pipe (
+      map (o => o.name.first),
+      map (capitalize),
+    ) (dig ('data.results') (r))
+  ) (results)
+})
 
-const main = flow (IO) (function * () {
-  yield chain (Log) (Return ('hello'))
-
-  const x = yield io
-  const y = yield other
-
-  const stream = from ([1, 2, 3, 4, 5, x, y])
-
-  const future = reduce (all) (0) (stream . map (process))
-
-  const unsubscribe = yield subscribe ({
-    next: Log,
-    error: Report,
-    complete: Log ('done'),
-  }) (stream)
-
-  yield fork (Report) (Log) (future)
-
-  const f = yield observe (Log) (stream . map (multiply (2)))
-
-  yield fork (Report ('miss')) (Log ('pass')) (f)
-
-  const emitter = Emitter ()
-
-  const foo = fromEvent ('foo') (emitter) . map (toUpperCase) . take (3)
-
-  yield observe (Log) (foo)
-
-  const emitFoo = emit (emitter) ('foo')
-
-  const z = pipe (
-    map (v => `-*-* ${v} *-*-`),
+const main = go (IO) (function * () {
+  const futures = [
+    http ('get') (getUsersUrl (5)),
+    http ('get') (getUsersUrl (13)),
     chain (
-      v => Future ((reject, resolve) => resolve (`---- ${v} ----`))
-    ),
-  ) (timeout ('foo') (1000))
+      amount => http ('get') (getUsersUrl (amount))
+    ) (
+      map (
+        v => v * 2
+      ) (timer (2000) (7)),
+    )
+  ]
 
-  yield fork (Report) (emitFoo) (z)
+  const s = from (futures)
+  const ss = yield awaitFutures (s)
+  const sss = ss . map (payload => dig ('data.results') (payload))
 
-  yield fork (Report) (emitFoo) (timeout ('bar') (2000))
-
-  const cancel = yield fork (Report) (emitFoo) (timeout ('baz') (3000))
-
-  yield fork (Report) (emitFoo) (timeout ('hello') (4000))
-
-  yield fork (Report) (emitFoo) (timeout ('world') (5000))
-
-  yield cancel
-
-  const a = Atom (0, all)
-  const b = Atom ('hello')
-  const c = Atom (['a', 'b', 'c'])
-
-  const flattened = yield flatten (a, b, c)
-
-  yield react (flattened) (Log)
-
-  yield fork (Report) (set (a)) (timeout (200) (2000))
-
-  yield set (a) (1000)
-  yield set (a) (50)
-  yield set (a) (50)
-  yield set (c) ('d', (p, v) => p . concat (v))
-  yield set (b) ('world')
-
-  const clear = yield interval (set (a) (5)) (1000)
-
-  yield fork (Report) (clear) (timeout () (10000))
-
-  yield fork (Report) (id) (timeout (Log ('hello world')) (5000))
+  yield observe (log) (sss)
 })
 
 run (main)
-
-const state = Struct ({
-  text: 'Test',
-  color: 'red',
-  value: 0,
-})
-
-const isBlue = computed ([state.color], color => color === 'blue')
-
-const element = h (
-  'div.cool',
-  {
-    classList: ['m-16', 'cool', state.text],
-    style: {
-      'background-color': state.color,
-    },
-  },
-  [
-    h ('div', [
-      state.text,
-      ' ',
-      state.value,
-      ' ',
-      h ('strong', 'test')
-    ]),
-    h ('div', [
-      when (
-        isBlue,
-        h (
-          'button',
-          {
-            'ev-click': send (state.color.set, 'red'),
-          },
-          'Change color to red',
-        ),
-        h (
-          'button',
-          {
-            'ev-click': send (state.color.set, 'blue'),
-          },
-          'Change color to blue',
-        ),
-      ),
-    ]),
-  ],
-)
-
-setTimeout (
-  () => state.text.set ('Another value'),
-  5000,
-)
-
-setInterval (
-  () => state.value.set (state.value () + 1),
-  1000,
-)
-
-setInterval (
-  () => state.set ({
-    text: 'Retrieved from server (not really)',
-    color: '#FFEECC',
-    value: 1337,
-  }),
-  10000,
-)
-
-document.body.appendChild (element)
