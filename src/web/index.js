@@ -1,5 +1,5 @@
 // next
-// TODO: get bundle size as small as possible
+// TODO: get bundle size as small as possible (code splitting)
 // TODO: curry all multiple parameter functions
 // TODO: type validators (isFunctor, isMonad, isMap, isChain, isOf)
 
@@ -126,7 +126,7 @@ const chain =
 const reduce =
   r => i => m =>
   isStream (m)
-    ? reduceStream (r) (i) (m)
+    ? streamReduce (r) (i) (m)
     : m.reduce
     ? () => m . reduce (r, i)
     : null
@@ -285,7 +285,7 @@ const observe =
     ))
   )
 
-const reduceStream =
+const streamReduce =
   reducer => initial => stream =>
     encaseP (() => mostReduce (reducer, initial, stream)) ()
 
@@ -376,6 +376,27 @@ const set =
 const react =
   a => f => a . react (f)
 
+const fuse =
+  f => a => b => flow (IO) (function * () {
+    const av = yield get (a)
+    const bv = yield get (b)
+
+    const atom = Atom (f (av) (bv))
+
+    const reaction =
+      m => v => flow (IO) (function * () {
+        const av = yield get (a)
+        const bv = yield get (b)
+
+        yield set (atom) (f (av) (bv))
+      })
+
+    yield react (a) (reaction (a))
+    yield react (b) (reaction (b))
+
+    return atom
+  })
+
 const flatten =
   (...list) => flow (IO) (function * () {
     const initial = []
@@ -400,33 +421,13 @@ const flatten =
     return atom
   })
 
-const fuse =
-  f => a => b => flow (IO) (function * () {
-    const av = yield get (a)
-    const bv = yield get (b)
-
-    const atom = Atom (f (av) (bv))
-
-    const reaction =
-      m => v => flow (IO) (function * () {
-        const av = yield get (a)
-        const bv = yield get (b)
-
-        yield set (atom) (f (av) (bv))
-      })
-
-    yield react (a) (reaction (a))
-    yield react (b) (reaction (b))
-
-    return atom
-  })
-
 Atom.of = Atom
 Atom.get = get
 Atom.set = set
 Atom.react = react
 Atom.map = map
 Atom.chain = chain
+Atom.fuse = fuse
 Atom.flatten = flatten
 
 // emitter
