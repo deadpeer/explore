@@ -1,14 +1,10 @@
-// today
-// TODO: stream.tap
-// TODO: future.fold
-// TODO: future.value
-
 // next
+// TODO: get bundle size as small as possible
 // TODO: curry all multiple parameter functions
 // TODO: type validators (isFunctor, isMonad, isMap, isChain, isOf)
 
 // future
-// TODO: fork crocks (use monet IO)
+// TODO: fork crocks / monet (use monet IO)
 // TODO: fork most (use IO methods)
 // TODO: fork fluture (use IO methods)
 // TODO: ensure all functions return List rather than array
@@ -20,7 +16,6 @@ import 'setimmediate'
 
 import axios from 'axios'
 import monet from 'monet'
-import crocks from 'crocks'
 import loGet from 'lodash.get'
 import {
   pipe,
@@ -33,53 +28,11 @@ import {
   map as mostMap,
   chain as mostChain,
   ap as mostAp,
-  slice as mostSlice,
   reduce as mostReduce,
   fromEvent as mostFromEvent,
-  merge,
-  mergeArray,
-  combine,
-  combineArray,
-  sample,
-  sampleWith,
-  zip,
-  switchLatest,
-  join,
-  mergeConcurrently,
-  awaitPromises,
-  debounce,
-  throttle,
-  delay,
-  multicast,
-  timestamp,
-  filter,
-  skipRepeats,
-  skipRepeatsWith,
-  transduce,
-  take,
-  skip,
-  since,
-  during,
-  loop,
-  takeWhile,
-  skipAfter,
-  until,
-  continueWith,
-  concatMap,
-  constant,
-  scan,
-  from,
   fromPromise,
-  periodic,
-  empty,
-  never,
-  iterate,
-  unfold,
-  generate,
-  startWith,
-  concat,
-  recoverWith,
-  throwError,
+  from,
+  awaitPromises,
 } from 'most'
 import {
   Future,
@@ -87,18 +40,20 @@ import {
   ap as futureAp,
   map as futureMap,
   chain as futureChain,
+  value as futureValue,
   isFuture,
   resolve,
+  reject,
   encaseP,
   promise,
+  fold,
 } from 'fluture'
 
 import { seed } from './seed.js'
 
 import './index.css'
 
-const { IO } = monet
-const { Maybe, Either, List } = crocks
+const { IO, Maybe, Either, List } = monet
 
 // number
 const ERROR_DIVIDE_BY_ZERO = 'Cannot divide by zero.'
@@ -243,37 +198,11 @@ const right =
 const left =
   e => e . left ()
 
-const value =
-  e => {
-    let x
-
-    try {
-      x = right (e)
-    } catch (error) {
-      x = left (e)
-    }
-
-    return x
-  }
-
 const containsLeft =
   v => e => v === left (e)
 
 const containsRight =
   v => e => v === right (e)
-
-const contains =
-  v => e => {
-    let x
-
-    try {
-      x = right (e)
-    } catch (error) {
-      x = left (e)
-    }
-
-    return x === v
-  }
 
 // flow (do notation)
 const flow =
@@ -293,18 +222,7 @@ const flow =
     return recurse ()
   }
 
-// http
-const http =
-  method => (url, data, config) => encaseP (axios) ({ method, url, data, config })
-
 // future
-const timer =
-  ms => (v = null) => Future ((_, resolve) => {
-    const timeout = setTimeout (() => resolve (v), ms)
-
-    return () => clearTimeout (timeout)
-  })
-
 const fork =
   reject => resolve => future =>
     map (
@@ -316,6 +234,26 @@ const fork =
         isIO (resolve) ? () => run (resolve) : runWith (resolve)
       ) (future))
     )
+
+const value =
+  resolve => future =>
+    map (
+      cancel => IO (() => cancel ())
+    ) (
+      IO (() => futureValue (
+        isIO (resolve) ? () => run (resolve) : runWith (resolve)
+      ) (future))
+    )
+
+const http =
+  method => (url, data, config) => encaseP (axios) ({ method, url, data, config })
+
+const timer =
+  ms => (v = null) => Future ((_, resolve) => {
+    const timeout = setTimeout (() => resolve (v), ms)
+
+    return () => clearTimeout (timeout)
+  })
 
 // stream
 const UPDATE_STREAM = 'UPDATE_STREAM'
@@ -372,6 +310,11 @@ const fromFuture =
 const awaitFutures =
   stream => awaitPromises (
     stream . map (future => promise (future))
+  )
+
+const tap =
+  effect => stream => stream . tap (
+    v => run (effect (v))
   )
 
 const Stream = {
@@ -511,36 +454,3 @@ const Emitter =
 
 const emit =
   emitter => type => value => emitter . emit (type) (value)
-
-
-
-// execution
-const getUsersUrl =
-  amount => `https://randomuser.me/api?results=${amount}`
-
-const main = flow (IO) (function * () {
-  const futures = [
-    http ('get') (getUsersUrl (5)),
-    http ('get') (getUsersUrl (13)),
-    pipe (
-      map (v => v * 2),
-      chain (amount => http ('get') (getUsersUrl (amount))),
-    ) (timer (2000) (7)),
-  ]
-
-  const stream = pipe (
-    awaitFutures,
-    map (payload => dig ('data.results') (payload)),
-    map (a => a . map (o => o.name.first)),
-  ) (from (futures))
-
-  const future = reduce ((p, c) => p . concat (c)) ([]) (stream)
-
-  const atom = Atom ()
-
-  yield react (atom) (log)
-
-  yield fork (report) (set (atom)) (future)
-})
-
-run (main)
