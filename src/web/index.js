@@ -170,7 +170,7 @@ const chain =
 
 const reduce =
   r => i => m =>
-  isStream(m)
+  isStream (m)
     ? reduceStream (r) (i) (m)
     : m.reduce
     ? () => m . reduce (r, i)
@@ -275,8 +275,8 @@ const contains =
     return x === v
   }
 
-// go (do notation)
-const go =
+// flow (do notation)
+const flow =
   M => g => {
     const doing = g ()
 
@@ -355,7 +355,7 @@ const fromEvent =
   type => emitter => mostFromEvent (type, emitter)
 
 const fromAtom =
-  atom => go (IO) (function * () {
+  atom => flow (IO) (function * () {
     const emitter = Emitter ()
     const stream = fromEvent (UPDATE_STREAM) (emitter)
 
@@ -434,7 +434,7 @@ const react =
   a => f => a . react (f)
 
 const flatten =
-  (...list) => go (IO) (function * () {
+  (...list) => flow (IO) (function * () {
     const initial = []
 
     for (let i = 0 ; i < list.length ; i++) {
@@ -445,7 +445,7 @@ const flatten =
     const atom = Atom (initial)
 
     for (let i = 0 ; i < list.length ; i++) {
-      yield react (list[i]) (value => go (IO) (function * () {
+      yield react (list[i]) (value => flow (IO) (function * () {
         const current = [...yield get (atom)]
 
         current[i] = value
@@ -458,14 +458,14 @@ const flatten =
   })
 
 const fuse =
-  f => a => b => go (IO) (function * () {
+  f => a => b => flow (IO) (function * () {
     const av = yield get (a)
     const bv = yield get (b)
 
     const atom = Atom (f (av) (bv))
 
     const reaction =
-      m => v => go (IO) (function * () {
+      m => v => flow (IO) (function * () {
         const av = yield get (a)
         const bv = yield get (b)
 
@@ -515,50 +515,32 @@ const emit =
 
 
 // execution
-const logNames =
-  payload => chain (log) (
-    IO (() =>
-      pipe (
-        map (o => o.name.first),
-        map (capitalize),
-      ) (dig ('data.results') (payload))
-    )
-  )
-
 const getUsersUrl =
   amount => `https://randomuser.me/api?results=${amount}`
 
-const getNames = go (Future) (function * () {
-  const results = [
-    yield http ('get') (getUsersUrl (2)),
-    yield http ('get') (getUsersUrl (5)),
-    yield http ('get') (getUsersUrl (13)),
-  ]
-
-  return chain (
-    r => pipe (
-      map (o => o.name.first),
-      map (capitalize),
-    ) (dig ('data.results') (r))
-  ) (results)
-})
-
-const main = go (IO) (function * () {
+const main = flow (IO) (function * () {
   const futures = [
     http ('get') (getUsersUrl (5)),
     http ('get') (getUsersUrl (13)),
     pipe (
       map (v => v * 2),
       chain (amount => http ('get') (getUsersUrl (amount))),
-    ) (timer (2000) (7))
+    ) (timer (2000) (7)),
   ]
 
   const stream = pipe (
     awaitFutures,
-    map (payload => dig ('data.results') (payload))
+    map (payload => dig ('data.results') (payload)),
+    map (a => a . map (o => o.name.first)),
   ) (from (futures))
 
-  yield observe (log) (stream)
+  const future = reduce ((p, c) => p . concat (c)) ([]) (stream)
+
+  const atom = Atom ()
+
+  yield react (atom) (log)
+
+  yield fork (report) (set (atom)) (future)
 })
 
 run (main)
