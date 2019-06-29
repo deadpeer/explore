@@ -49,10 +49,6 @@ import {
   fold,
 } from 'fluture'
 
-import { seed } from './seed.js'
-
-import './index.css'
-
 const { IO, Maybe, Either, List } = monet
 
 // number
@@ -204,8 +200,8 @@ const containsLeft =
 const containsRight =
   v => e => v === right (e)
 
-// flow (do notation)
-const flow =
+// go (do notation)
+const go =
   M => g => {
     const doing = g ()
 
@@ -293,7 +289,7 @@ const fromEvent =
   type => emitter => mostFromEvent (type, emitter)
 
 const fromAtom =
-  atom => flow (IO) (function * () {
+  atom => go (IO) (function * () {
     const emitter = Emitter ()
     const stream = fromEvent (UPDATE_STREAM) (emitter)
 
@@ -332,6 +328,7 @@ const Stream = {
   fromAtom,
   fromFuture,
   awaitFutures,
+  tap,
 }
 
 // atom
@@ -354,16 +351,6 @@ const Atom =
       react: effect => IO (() => (
         state.effects = state.effects . concat (effect))
       ),
-
-      map: f => Atom (_, reducer, state),
-
-      chain: f => {
-        const atom = f (state.value)
-
-        state.effects . forEach (effect => atom . react (effect))
-
-        return atom
-      }
     }
   }
 
@@ -377,14 +364,14 @@ const react =
   a => f => a . react (f)
 
 const fuse =
-  f => a => b => flow (IO) (function * () {
+  f => a => b => go (IO) (function * () {
     const av = yield get (a)
     const bv = yield get (b)
 
     const atom = Atom (f (av) (bv))
 
     const reaction =
-      m => v => flow (IO) (function * () {
+      m => v => go (IO) (function * () {
         const av = yield get (a)
         const bv = yield get (b)
 
@@ -398,7 +385,7 @@ const fuse =
   })
 
 const flatten =
-  (...list) => flow (IO) (function * () {
+  (...list) => go (IO) (function * () {
     const initial = []
 
     for (let i = 0 ; i < list.length ; i++) {
@@ -409,7 +396,7 @@ const flatten =
     const atom = Atom (initial)
 
     for (let i = 0 ; i < list.length ; i++) {
-      yield react (list[i]) (value => flow (IO) (function * () {
+      yield react (list[i]) (value => go (IO) (function * () {
         const current = [...yield get (atom)]
 
         current[i] = value
@@ -425,8 +412,6 @@ Atom.of = Atom
 Atom.get = get
 Atom.set = set
 Atom.react = react
-Atom.map = map
-Atom.chain = chain
 Atom.fuse = fuse
 Atom.flatten = flatten
 
