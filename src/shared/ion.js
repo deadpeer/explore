@@ -52,8 +52,17 @@ export const fold = _fold
 export const from = _from
 
 // io
+const ERROR_INVALID_IO = 'Cannot run parameter as an IO or Generator.'
 export const run =
-  io => io . run ()
+  r => {
+    if (isIO (r)) return r . run ()
+
+    try {
+      go (IO) (r) . run ()
+    } catch (_) {
+      throw new Error (ERROR_INVALID_IO)
+    }
+  }
 
 export const runWith =
   f => v => run (f (v))
@@ -213,6 +222,8 @@ export const Atom =
       react: effect => IO (() => (
         state.effects = state.effects . concat (effect))
       ),
+
+      map: f => Atom (f (state.value))
     }
   }
 
@@ -304,5 +315,40 @@ export const emit =
   emitter => type => value => emitter . emit (type) (value)
 
  // graph
+export const Graph =
+  () => IO (() => Gun ())
 
-export const Graph = Gun
+export const select =
+  s => g => g . get (s)
+
+export const update =
+  o => g => IO (() => g . put (o))
+
+export const once =
+  io => g => IO (
+    () => g . once (runWith (io))
+  )
+
+export const toStream =
+  g => IO (() => {
+    const emitter = Emitter ()
+    const stream = fromEvent ('foo') (emitter)
+
+    g . on (
+      runWith (emit (emitter) ('foo'))
+    )
+
+    return stream
+  })
+
+export const toAtom =
+  g => IO (() => {
+    const atom = Atom ()
+
+    g . on (
+      runWith (set (atom))
+    )
+
+    return atom
+  })
+

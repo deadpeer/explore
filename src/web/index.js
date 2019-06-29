@@ -12,10 +12,47 @@
 // TODO: add typescript definitions
 // TODO: fork prettier to implement functional code style
 
-import { run, log } from '../shared/ion.js'
-import { Maybe, map, capitalize } from '../shared/base.js'
+import {
+  IO,
+  Graph,
+  run,
+  log,
+  select,
+  update,
+  toStream,
+  once,
+  observe,
+} from '../shared/ion.js'
+import {
+  go,
+  pipe,
+  map,
+} from '../shared/base.js'
+import {
+  h,
+  mount,
+  onEvent,
+} from '../shared/ion-html.js'
 
-const main = log (map (capitalize) ('hello world.'))
+const main = function * () {
+  const stream = yield toStream (
+    pipe (
+      select ('a'),
+      select ('b'),
+      select ('c'),
+      select ('d'),
+      select ('e'),
+    ) (Graph ())
+  )
+
+  yield observe (log) (stream)
+
+  const html = h ('button', {
+    'ev-click': run (log (update ({ data: '' }) (selection)))
+  }, 'update')
+
+  yield mount (html)
+}
 
 run (main)
 

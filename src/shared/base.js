@@ -10,6 +10,7 @@ import loGet from 'lodash.get'
 import {
   pipe as _pipe,
   compose as _compose,
+  prop as _prop,
   mergeDeepRight,
 } from 'ramda'
 
@@ -21,6 +22,7 @@ export const { Maybe, Either, List, Reader, Validation } = monet
 // exports
 export const pipe = _pipe
 export const compose = _compose
+export const prop = _prop
 export const isFuture = _isFuture
 export const Future = _Future
 
