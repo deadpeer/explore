@@ -52,16 +52,11 @@ export const fold = _fold
 export const from = _from
 
 // io
-const ERROR_INVALID_IO = 'Cannot run parameter as an IO or Generator.'
 export const run =
   r => {
     if (isIO (r)) return r . run ()
 
-    try {
-      go (IO) (r) . run ()
-    } catch (_) {
-      throw new Error (ERROR_INVALID_IO)
-    }
+    return go (IO) (r) . run ()
   }
 
 export const runWith =
@@ -281,12 +276,16 @@ export const flatten =
     return atom
   })
 
+export const isAtom =
+  m => !!m.react
+
 Atom.of = Atom
 Atom.get = get
 Atom.set = set
 Atom.react = react
 Atom.fuse = fuse
 Atom.flatten = flatten
+Atom.isAtom = isAtom
 
 // emitter
 class EmitterInstance {
@@ -332,10 +331,10 @@ export const once =
 export const toStream =
   g => IO (() => {
     const emitter = Emitter ()
-    const stream = fromEvent ('foo') (emitter)
+    const stream = fromEvent ('_') (emitter)
 
     g . on (
-      runWith (emit (emitter) ('foo'))
+      runWith (emit (emitter) ('_'))
     )
 
     return stream

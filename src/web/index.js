@@ -32,26 +32,39 @@ import {
   h,
   mount,
   onEvent,
+  Observable,
 } from '../shared/ion-html.js'
 
 const main = function * () {
-  const stream = yield toStream (
-    pipe (
-      select ('a'),
-      select ('b'),
-      select ('c'),
-      select ('d'),
-      select ('e'),
-    ) (Graph ())
-  )
+  const graph = yield Graph ()
 
-  yield observe (log) (stream)
+  const selection = pipe (
+    select ('a'),
+    select ('b'),
+    select ('c'),
+    select ('d'),
+    select ('e'),
+  ) (graph)
 
-  const html = h ('button', {
-    'ev-click': run (log (update ({ data: '' }) (selection)))
-  }, 'update')
+  const change =
+    v => update ({ data: v }) (selection)
+
+  const stream = yield toStream (selection)
+  const value = yield Observable (stream . map (o => o.data))
+
+  const a = h ('button', {
+    'ev-click': onEvent (change ('hello'))
+  }, 'hello')
+
+  const b = h ('button', {
+    'ev-click': onEvent (change ('world'))
+  }, 'world')
+
+  const html = h ('div', [a, b, value])
 
   yield mount (html)
+
+  yield once (change) (selection)
 }
 
 run (main)
