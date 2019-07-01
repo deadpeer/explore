@@ -49,6 +49,9 @@ const main = function * () {
   const change =
     v => update ({ data: v }) (selection)
 
+  const init =
+    v => change (v.data)
+
   const stream = yield toStream (selection)
   const value = yield Observable (stream . map (o => o.data))
 
@@ -62,10 +65,9 @@ const main = function * () {
 
   const html = h ('div', [a, b, value])
 
+  yield observe (log) (stream)
+  yield once (init) (selection)
   yield mount (html)
-
-  yield once (change) (selection)
 }
 
 run (main)
-
