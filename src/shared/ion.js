@@ -1,5 +1,3 @@
-import 'setimmediate'
-
 import axios from 'axios'
 import monet from 'monet'
 import ee from 'event-emitter'
@@ -29,6 +27,7 @@ import {
   Future as _Future,
 } from 'fluture'
 import Gun from 'gun/gun'
+import 'gun/sea'
 
 import {
   map,
@@ -50,6 +49,10 @@ export const encaseP = _encaseP
 export const promise = _promise
 export const fold = _fold
 export const from = _from
+
+// random
+export const random =
+  min => max => IO (() => Math . floor (Math . random () * max) + min)
 
 // io
 export const run =
@@ -111,8 +114,8 @@ export const http =
   method => (url, data, config) => encaseP (axios) ({ method, url, data, config })
 
 export const timer =
-  ms => (v = null) => Future ((_, resolve) => {
-    const timeout = setTimeout (() => resolve (v), ms)
+  ms => (future = null) => Future ((_, resolve) => {
+    const timeout = setTimeout (() => resolve (future), ms)
 
     return () => clearTimeout (timeout)
   })
@@ -146,6 +149,15 @@ export const observe =
         v => run (f (v))
     ))
   )
+
+export const pool =
+  initial => reducer => stream => IO (() => {
+    const atom = Atom (initial, reducer)
+
+    const cancel = run (observe (v => atom . set (v)) (stream))
+
+    return atom
+  })
 
 export const streamReduce =
   reducer => initial => stream =>
@@ -188,6 +200,7 @@ export const Stream = {
   isStream,
   subscribe,
   drain,
+  pool,
   observe,
   from,
   fromEvent,
@@ -317,6 +330,12 @@ export const emit =
 export const Graph =
   () => IO (() => Gun ())
 
+export const init =
+  g => IO (() => g . init ())
+
+export const State =
+  s => g => toAtom (s (g))
+
 export const select =
   s => g => g . get (s)
 
@@ -329,7 +348,7 @@ export const once =
   )
 
 export const toStream =
-  g => IO (() => {
+  g => {
     const emitter = Emitter ()
     const stream = fromEvent ('_') (emitter)
 
@@ -338,16 +357,20 @@ export const toStream =
     )
 
     return stream
-  })
+  }
 
 export const toAtom =
-  g => IO (() => {
+  g => {
     const atom = Atom ()
+
+    g . once (
+      runWith (set (atom))
+    )
 
     g . on (
       runWith (set (atom))
     )
 
     return atom
-  })
+  }
 

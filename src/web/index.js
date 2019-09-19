@@ -12,6 +12,8 @@
 // TODO: add typescript definitions
 // TODO: fork prettier to implement functional code style
 
+import React from 'react'
+
 import {
   IO,
   Graph,
@@ -20,23 +22,30 @@ import {
   select,
   update,
   toStream,
-  once,
+  toAtom,
   observe,
+  pool,
+  react,
+  timer,
+  fork,
 } from '../shared/ion.js'
 import {
   go,
   pipe,
   map,
+  chain,
 } from '../shared/base.js'
 import {
-  h,
   mount,
   onEvent,
-  Observable,
+  withState,
+  withEffect,
 } from '../shared/ion-html.js'
 
 const main = function * () {
   const graph = yield Graph ()
+  // const user = graph . user ()
+  // yield log (user)
 
   const selection = pipe (
     select ('a'),
@@ -46,27 +55,28 @@ const main = function * () {
     select ('e'),
   ) (graph)
 
-  const change =
-    v => update ({ data: v }) (selection)
+  const atom = toAtom (selection)
 
-  const init =
-    v => change (v.data)
+  const updateA = onEvent (update ({ value: 'a' }) (selection))
+  const updateB = onEvent (update ({ value: 'b' }) (selection))
 
-  const stream = yield toStream (selection)
-  const value = yield Observable (stream . map (o => o.data))
+  const Value = withEffect (log ('hello world')) (
+    withState (atom) (({ message, value }) => (
+      <div>
+        {`${message} ${value}`}
+      </div>
+    ))
+  )
 
-  const a = h ('button', {
-    'ev-click': onEvent (change ('hello'))
-  }, 'hello')
+  const html = (
+    <div>
+      <button onClick={updateA}>set a</button>
+      <button onClick={updateB}>set b</button>
 
-  const b = h ('button', {
-    'ev-click': onEvent (change ('world'))
-  }, 'world')
+      <Value message='hello' />
+    </div>
+  )
 
-  const html = h ('div', [a, b, value])
-
-  yield observe (log) (stream)
-  yield once (init) (selection)
   yield mount (html)
 }
 
